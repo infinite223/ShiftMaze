@@ -1,4 +1,8 @@
-# Welcome to your Expo app 👋
+# ShiftMaze
+
+MazeShift is a fast-paced maze game where your goal constantly moves, challenging your reflexes and navigation skills. Use the on-screen joystick to guide your player through dynamically generated labyrinths while racing against the countdown. Reach the target before time runs out — but stay sharp, the target will shift just when you least expect it!
+
+# Setup project
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
