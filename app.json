@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "ShiftMaze",
-    "slug": "ShiftMaze",
+    "slug": "shiftmaze",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "territorycontrollite",
+    "scheme": "ShiftMaze",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -30,7 +30,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
@@ -43,7 +43,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "59f5ab93-6e7b-4727-9aab-86dbe4a6e16a"
+        "projectId": "76a8ccef-d158-4d29-98c8-afe3705e2284"
       }
     }
   }

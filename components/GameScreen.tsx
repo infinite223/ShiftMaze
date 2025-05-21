@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  Vibration,
   View,
 } from "react-native";
 import Joystick from "../components/Joystick";
@@ -146,6 +147,7 @@ const GameScreen: React.FC = () => {
       setJoystickDirection({ x: 0, y: 0 });
       setCountdown(15);
       setFlash(false);
+      Vibration.vibrate(200);
       Alert.alert("Gratulacje!", "Dotarłeś do celu!", [
         {
           text: "OK",
@@ -195,7 +197,7 @@ const GameScreen: React.FC = () => {
           }
         }
       }
-
+      Vibration.vibrate([100, 100, 100]);
       setTargetPos(farthestCell);
       setCountdown(15);
       setFlash(false);
@@ -257,8 +259,8 @@ const GameScreen: React.FC = () => {
         </Pressable>
       )}
       {!showStartScreen && (
-        <View style={{ position: "absolute", top: 80, alignSelf: "center" }}>
-          <Text style={{ fontSize: 24, fontWeight: "bold" }}>
+        <View style={styles.countdownContainer}>
+          <Text style={styles.countdownText}>
             Cel zmieni się za: {countdown} s
           </Text>
         </View>
@@ -330,6 +332,17 @@ const styles = StyleSheet.create({
 
   endButtonText: {
     fontSize: 40,
+    fontWeight: "bold",
+  },
+
+  countdownContainer: {
+    position: "absolute",
+    top: 80,
+    alignSelf: "center",
+  },
+
+  countdownText: {
+    fontSize: 24,
     fontWeight: "bold",
   },
 });
