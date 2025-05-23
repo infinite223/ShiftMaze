@@ -1,4 +1,5 @@
 import { findStartAndGoal, generateMaze } from "@/helpers/generate";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -28,7 +29,8 @@ const windowWidth = Dimensions.get("window").width;
 const windowHeight = Dimensions.get("window").height;
 
 const MAZE_OFFSET_X = (windowWidth - MAZE_WIDTH) / 2;
-const MAZE_OFFSET_Y = (windowHeight - MAZE_HEIGHT) / 2;
+const TOP_UI_HEIGHT = 0; // szacunkowa wysokość UI (licznik + margines)
+const MAZE_OFFSET_Y = (windowHeight - MAZE_HEIGHT) / 2 + TOP_UI_HEIGHT / 2;
 
 const PLAYER_SPEED = 7;
 
@@ -43,21 +45,55 @@ const GameScreen: React.FC = () => {
   const animationFrameRef = useRef<number | null>(null);
   const joystickDirectionRef = useRef({ x: 0, y: 0 });
   const [gameOver, setGameOver] = useState(false);
+  const [level, setLevel] = useState(1);
+  const getGridSize = (level: number) => 21 + (level - 1) * 2;
+  const [relocations, setRelocations] = useState(0);
+  const [bestLevel, setBestLevel] = useState(1);
+
+  useEffect(() => {
+    loadBestLevel();
+  }, []);
+
+  const saveBestLevel = async (level: number) => {
+    try {
+      await AsyncStorage.setItem("bestLevel", level.toString());
+    } catch (e) {
+      console.error("Błąd zapisu najlepszego poziomu:", e);
+    }
+  };
+
+  const loadBestLevel = async () => {
+    try {
+      const storedLevel = await AsyncStorage.getItem("bestLevel");
+      if (storedLevel !== null) {
+        setBestLevel(parseInt(storedLevel, 10));
+      }
+    } catch (e) {
+      console.error("Błąd odczytu najlepszego poziomu:", e);
+    }
+  };
 
   const initializeGame = () => {
-    const newMaze = generateMaze(GRID_SIZE);
+    const gridSize = getGridSize(level);
+    const newMaze = generateMaze(gridSize);
     const { start, goal } = findStartAndGoal(newMaze);
+
+    // Dynamiczne obliczenia
+    const mazeWidth = TILE_SIZE * gridSize;
+    const mazeHeight = TILE_SIZE * gridSize;
+    const mazeOffsetX = (windowWidth - mazeWidth) / 2;
+    const mazeOffsetY = (windowHeight - mazeHeight) / 2 + TOP_UI_HEIGHT / 2;
 
     setMaze(newMaze);
 
     setPlayerPos({
-      x: MAZE_OFFSET_X + TILE_SIZE * start.x + (TILE_SIZE - PLAYER_SIZE) / 2,
-      y: MAZE_OFFSET_Y + TILE_SIZE * start.y + (TILE_SIZE - PLAYER_SIZE) / 2,
+      x: mazeOffsetX + TILE_SIZE * start.x + (TILE_SIZE - PLAYER_SIZE) / 2,
+      y: mazeOffsetY + TILE_SIZE * start.y + (TILE_SIZE - PLAYER_SIZE) / 2,
     });
 
     setTargetPos({
-      x: MAZE_OFFSET_X + TILE_SIZE * goal.x + (TILE_SIZE - TARGET_SIZE) / 2,
-      y: MAZE_OFFSET_Y + TILE_SIZE * goal.y + (TILE_SIZE - TARGET_SIZE) / 2,
+      x: mazeOffsetX + TILE_SIZE * goal.x + (TILE_SIZE - TARGET_SIZE) / 2,
+      y: mazeOffsetY + TILE_SIZE * goal.y + (TILE_SIZE - TARGET_SIZE) / 2,
     });
 
     setJoystickDirection({ x: 0, y: 0 });
@@ -148,14 +184,21 @@ const GameScreen: React.FC = () => {
       setCountdown(15);
       setFlash(false);
       Vibration.vibrate(200);
-      Alert.alert("Gratulacje!", "Dotarłeś do celu!", [
-        {
-          text: "OK",
-          onPress: () => {
-            initializeGame();
-          },
-        },
-      ]);
+      if (level + 1 > bestLevel) {
+        setBestLevel(level + 1);
+        saveBestLevel(level + 1);
+      }
+      setLevel((prev) => prev + 1);
+      initializeGame();
+
+      // Alert.alert("Gratulacje!", "Dotarłeś do celu!", [
+      //   {
+      //     text: "OK",
+      //     onPress: () => {
+      //       initializeGame();
+      //     },
+      //   },
+      // ]);
     }
   }, [playerPos, targetPos, gameOver, maze, showStartScreen]);
 
@@ -169,6 +212,25 @@ const GameScreen: React.FC = () => {
     if (maze.length === 0 || gameOver || showStartScreen) return;
 
     if (countdown === 0) {
+      setRelocations((prev) => prev + 1);
+      if (relocations + 1 >= 3) {
+        Alert.alert(
+          "Koniec gry",
+          "Przekroczono limit relokacji. Gra zostanie zresetowana.",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setLevel(1);
+                setRelocations(0);
+                initializeGame();
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       const playerCenter = {
         x: playerPosRef.current.x + PLAYER_SIZE / 2,
         y: playerPosRef.current.y + PLAYER_SIZE / 2,
@@ -197,6 +259,7 @@ const GameScreen: React.FC = () => {
           }
         }
       }
+
       Vibration.vibrate([100, 100, 100]);
       setTargetPos(farthestCell);
       setCountdown(15);
@@ -260,9 +323,18 @@ const GameScreen: React.FC = () => {
       )}
       {!showStartScreen && (
         <View style={styles.countdownContainer}>
-          <Text style={styles.countdownText}>
+          <Text
+            style={[
+              styles.countdownText,
+              relocations === 2 && { color: "red" },
+            ]}
+          >
             Cel zmieni się za: {countdown} s
           </Text>
+          <View style={styles.statusContainer}>
+            <Text style={styles.statusText}>Poziom: {level}</Text>
+            <Text style={styles.statusText}>Relokacje: {relocations}/3</Text>
+          </View>
         </View>
       )}
 
@@ -279,6 +351,19 @@ const GameScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  statusContainer: {
+    position: "absolute",
+    top: 40,
+    alignSelf: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "80%",
+  },
+  statusText: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
   container: {
     flex: 1,
     alignItems: "center",
