@@ -4,9 +4,10 @@ import { StyleSheet, View } from "react-native";
 interface MazeProps {
   mazeData: number[][];
   tileSize: number;
+  color?: string;
 }
 
-const Maze: React.FC<MazeProps> = ({ mazeData, tileSize }) => {
+const Maze: React.FC<MazeProps> = ({ mazeData, tileSize, color }) => {
   return (
     <View>
       {mazeData.map((row, rowIndex) => (
@@ -19,7 +20,7 @@ const Maze: React.FC<MazeProps> = ({ mazeData, tileSize }) => {
                 {
                   width: tileSize,
                   height: tileSize,
-                  backgroundColor: cell === 1 ? "black" : "lightgray",
+                  backgroundColor: cell === 1 ? color || "black" : "lightgray",
                 },
               ]}
             />

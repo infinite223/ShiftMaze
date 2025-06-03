@@ -18,6 +18,7 @@ import Maze from "../components/Maze";
 import Player from "../components/Player";
 import Target from "../components/Target";
 
+const MAX_LEVEL = 7;
 const GRID_SIZE = 21;
 const TILE_SIZE = Dimensions.get("window").width / (GRID_SIZE + 2);
 const PLAYER_SIZE = TILE_SIZE * 0.7;
@@ -35,7 +36,6 @@ const MAZE_OFFSET_Y = (windowHeight - MAZE_HEIGHT) / 2 + TOP_UI_HEIGHT / 2;
 
 const PLAYER_SPEED = 7;
 
-// NOWOŚĆ: funkcja wyliczająca czas na poziom
 const getTimeForLevel = (level: number) => {
   return Math.max(5, 35 - (level - 1) * 5);
 };
@@ -56,6 +56,7 @@ const GameScreen: React.FC = () => {
   const [relocations, setRelocations] = useState(0);
   const [bestLevel, setBestLevel] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
+  const [showWinScreen, setShowWinScreen] = useState(false);
 
   useEffect(() => {
     loadBestLevel();
@@ -84,7 +85,6 @@ const GameScreen: React.FC = () => {
     const gridSize = GRID_SIZE;
     const newMaze = generateMaze(gridSize);
     const { start, goal } = findStartAndGoal(newMaze);
-
     const mazeWidth = TILE_SIZE * gridSize;
     const mazeHeight = TILE_SIZE * gridSize;
     const mazeOffsetX = (windowWidth - mazeWidth) / 2;
@@ -189,15 +189,19 @@ const GameScreen: React.FC = () => {
     );
 
     if (distance < PLAYER_SIZE / 2 + TARGET_SIZE / 2) {
-      setGameOver(true);
       setJoystickDirection({ x: 0, y: 0 });
-
       Vibration.vibrate(200);
-      const nextLevel = level + 1;
-      setLevel(nextLevel);
-      if (nextLevel > bestLevel) {
-        setBestLevel(nextLevel);
-        saveBestLevel(nextLevel);
+
+      if (level === MAX_LEVEL) {
+        setGameOver(true);
+        setShowWinScreen(true); // TUTAJ
+      } else {
+        const nextLevel = level + 1;
+        setLevel(nextLevel);
+        if (nextLevel > bestLevel) {
+          setBestLevel(nextLevel);
+          saveBestLevel(nextLevel);
+        }
       }
     }
   }, [playerPos, targetPos, gameOver, maze, showStartScreen]);
@@ -300,6 +304,7 @@ const GameScreen: React.FC = () => {
               style={styles.startButton}
               onPress={() => {
                 setShowStartScreen(false);
+                initializeGame();
               }}
             >
               <Text style={styles.startButtonText}>Start</Text>
@@ -380,7 +385,44 @@ const GameScreen: React.FC = () => {
         </>
       )}
 
-      <Maze mazeData={maze} tileSize={TILE_SIZE} />
+      {showWinScreen && (
+        <BlurView intensity={90} tint="light" style={StyleSheet.absoluteFill}>
+          <View style={styles.startOverlay}>
+            <FontAwesome
+              name="trophy"
+              size={100}
+              color="#FFD700"
+              style={{ marginBottom: 20 }}
+            />
+
+            <Text style={styles.winTitle}>Gratulacje!</Text>
+            <Text style={styles.winSubtitle}>Ukończyłeś grę 🎉</Text>
+            <Pressable
+              style={styles.startButton}
+              onPress={() => {
+                setShowWinScreen(false);
+                setLevel(1);
+                setRelocations(0);
+                initializeGame();
+              }}
+            >
+              <Text style={styles.startButtonText}>Zagraj ponownie</Text>
+            </Pressable>
+          </View>
+        </BlurView>
+      )}
+
+      <Maze
+        mazeData={maze}
+        tileSize={TILE_SIZE}
+        color={
+          level === MAX_LEVEL - 1
+            ? "blue"
+            : level === MAX_LEVEL
+            ? "green"
+            : undefined
+        }
+      />
       <Player position={playerPos} size={PLAYER_SIZE} />
       <Target position={targetPos} size={TARGET_SIZE} />
       <Joystick
@@ -483,6 +525,17 @@ const styles = StyleSheet.create({
     right: 10,
   },
   startButton2: {},
+  winTitle: {
+    fontSize: 36,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#2e2e2e",
+  },
+  winSubtitle: {
+    fontSize: 24,
+    marginBottom: 30,
+    color: "#444",
+  },
 });
 
 export default GameScreen;
