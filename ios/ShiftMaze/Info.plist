@@ -27,7 +27,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>shiftMaze</string>
+          <string>ShiftMaze</string>
           <string>com.infinite223.ShiftMaze</string>
         </array>
       </dict>
