@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import { windowHeight, windowWidth } from "./GameScreen";
 
 interface MazeProps {
   mazeData: number[][];
@@ -9,7 +10,7 @@ interface MazeProps {
 
 const Maze: React.FC<MazeProps> = ({ mazeData, tileSize, color }) => {
   return (
-    <View>
+    <View style={styles.mazeContainer}>
       {mazeData.map((row, rowIndex) => (
         <View key={rowIndex} style={styles.row}>
           {row.map((cell, colIndex) => (
@@ -32,6 +33,15 @@ const Maze: React.FC<MazeProps> = ({ mazeData, tileSize, color }) => {
 };
 
 const styles = StyleSheet.create({
+  mazeContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: windowWidth,
+    height: windowHeight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   row: {
     flexDirection: "row",
   },
