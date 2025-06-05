@@ -20,15 +20,15 @@ import Target from "../components/Target";
 
 const MAX_LEVEL = 7;
 const GRID_SIZE = 21;
-const TILE_SIZE = Dimensions.get("window").width / (GRID_SIZE + 2);
+export const TILE_SIZE = Dimensions.get("window").width / (GRID_SIZE + 2);
 const PLAYER_SIZE = TILE_SIZE * 0.7;
 const TARGET_SIZE = TILE_SIZE * 0.8;
 
 const MAZE_WIDTH = TILE_SIZE * GRID_SIZE;
 const MAZE_HEIGHT = TILE_SIZE * GRID_SIZE;
 
-const windowWidth = Dimensions.get("window").width;
-const windowHeight = Dimensions.get("window").height;
+export const windowWidth = Dimensions.get("window").width;
+export const windowHeight = Dimensions.get("window").height;
 
 const MAZE_OFFSET_X = (windowWidth - MAZE_WIDTH) / 2;
 const TOP_UI_HEIGHT = 0;
