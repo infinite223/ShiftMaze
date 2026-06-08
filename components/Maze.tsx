@@ -1,6 +1,5 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { windowHeight, windowWidth } from "./GameScreen";
 
 interface MazeProps {
   mazeData: number[][];
@@ -8,6 +7,11 @@ interface MazeProps {
   color?: string;
 }
 
+/**
+ * Renders the maze grid. The component sizes itself purely from `tileSize`
+ * (tileSize * gridSize), so it always exactly fills its parent maze container.
+ * Positioning/centering on screen is handled by the parent in GameScreen.
+ */
 const Maze: React.FC<MazeProps> = ({ mazeData, tileSize, color }) => {
   return (
     <View style={styles.mazeContainer}>
@@ -16,14 +20,13 @@ const Maze: React.FC<MazeProps> = ({ mazeData, tileSize, color }) => {
           {row.map((cell, colIndex) => (
             <View
               key={`${rowIndex}-${colIndex}`}
-              style={[
-                styles.tile,
-                {
-                  width: tileSize,
-                  height: tileSize,
-                  backgroundColor: cell === 1 ? color || "black" : "lightgray",
-                },
-              ]}
+              style={{
+                width: tileSize,
+                height: tileSize,
+                backgroundColor: cell === 1 ? color || "black" : "lightgray",
+                borderWidth: StyleSheet.hairlineWidth,
+                borderColor: "gray",
+              }}
             />
           ))}
         </View>
@@ -37,17 +40,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    width: windowWidth,
-    height: windowHeight,
-    alignItems: "center",
-    justifyContent: "center",
   },
   row: {
     flexDirection: "row",
-  },
-  tile: {
-    borderWidth: 0.5,
-    borderColor: "gray",
   },
 });
 

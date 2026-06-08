@@ -90,6 +90,7 @@ const styles = StyleSheet.create({
   base: {
     position: "absolute",
     bottom: 40,
+    alignSelf: "center",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 100,

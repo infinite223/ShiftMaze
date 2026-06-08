@@ -1,51 +1,79 @@
 import { findStartAndGoal, generateMaze } from "@/helpers/generate";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BlurView } from "expo-blur";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Dimensions,
   Image,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   Vibration,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
-import Joystick from "../components/Joystick";
-import Maze from "../components/Maze";
-import Player from "../components/Player";
-import Target from "../components/Target";
+import Joystick from "./Joystick";
+import Maze from "./Maze";
+import Player from "./Player";
+import Target from "./Target";
+
+// --- Gameplay constants ----------------------------------------------------
+// The whole game logic works in *tile units* (1 unit = 1 maze cell) so it is
+// completely independent of screen size / pixel density. `tileSize` (computed
+// from the available screen area) is only used to scale rendering. This is the
+// key to stable behaviour across phones, folds, 21:9 and tablets.
 
 const MAX_LEVEL = 7;
-const GRID_SIZE = 21;
-export const TILE_SIZE = Dimensions.get("window").width / (GRID_SIZE + 2);
-const PLAYER_SIZE = TILE_SIZE * 0.7;
-const TARGET_SIZE = TILE_SIZE * 0.8;
+const GRID_SIZE = 21; // must stay odd for the maze generator
 
-const MAZE_WIDTH = TILE_SIZE * GRID_SIZE;
-const MAZE_HEIGHT = TILE_SIZE * GRID_SIZE;
+const PLAYER_TILES = 0.7; // player diameter, in tiles
+const TARGET_TILES = 0.8; // target size, in tiles
+const SPEED_TILES = 0.55; // player movement per animation frame, in tiles
 
-export const windowWidth = Dimensions.get("window").width;
-export const windowHeight = Dimensions.get("window").height;
-
-const MAZE_OFFSET_X = (windowWidth - MAZE_WIDTH) / 2;
-const TOP_UI_HEIGHT = 0;
-const MAZE_OFFSET_Y = (windowHeight - MAZE_HEIGHT) / 2 + TOP_UI_HEIGHT / 2;
-
-const PLAYER_SPEED = 7;
+// Space (in px) reserved on top/bottom for the HUD and the joystick so the
+// maze is always centered in the remaining area.
+const HUD_RESERVED = 96;
+const JOYSTICK_RESERVED = 210;
+const H_MARGIN = 8;
 
 const getTimeForLevel = (level: number) => {
   return Math.max(5, 35 - (level - 1) * 5);
 };
 
 const GameScreen: React.FC = () => {
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // Responsive layout: pick the largest tile size that fits the maze fully
+  // within the usable area (after reserving room for HUD + joystick + safe
+  // area), then center the square maze inside that area.
+  const layout = useMemo(() => {
+    const topReserved = insets.top + HUD_RESERVED;
+    const bottomReserved = insets.bottom + JOYSTICK_RESERVED;
+    const availW = width - H_MARGIN * 2;
+    const availH = height - topReserved - bottomReserved;
+
+    const tileSize = Math.max(
+      4,
+      Math.floor(Math.min(availW / GRID_SIZE, availH / GRID_SIZE)),
+    );
+    const mazeSize = tileSize * GRID_SIZE;
+    const left = Math.round((width - mazeSize) / 2);
+    const top = Math.round(topReserved + Math.max(0, availH - mazeSize) / 2);
+
+    return { tileSize, mazeSize, left, top };
+  }, [width, height, insets.top, insets.bottom]);
+
+  const { tileSize, mazeSize, left: mazeLeft, top: mazeTop } = layout;
+
   const [countdown, setCountdown] = useState(getTimeForLevel(1));
   const [maxCountdown, setMaxCountdown] = useState(getTimeForLevel(1));
   const [showStartScreen, setShowStartScreen] = useState(true);
   const [flash, setFlash] = useState(false);
   const [maze, setMaze] = useState<number[][]>([]);
+  // playerPos / targetPos are the top-left corner of each entity, in TILE units.
   const [playerPos, setPlayerPos] = useState({ x: 0, y: 0 });
   const [targetPos, setTargetPos] = useState({ x: 0, y: 0 });
   const [joystickDirection, setJoystickDirection] = useState({ x: 0, y: 0 });
@@ -81,32 +109,26 @@ const GameScreen: React.FC = () => {
     }
   };
 
+  // Place an entity centered inside the given grid cell (tile units).
+  const cellToPos = (cell: { x: number; y: number }, sizeTiles: number) => ({
+    x: cell.x + (1 - sizeTiles) / 2,
+    y: cell.y + (1 - sizeTiles) / 2,
+  });
+
   const initializeGame = () => {
-    const gridSize = GRID_SIZE;
-    const newMaze = generateMaze(gridSize);
+    const newMaze = generateMaze(GRID_SIZE);
     const { start, goal } = findStartAndGoal(newMaze);
-    const mazeWidth = TILE_SIZE * gridSize;
-    const mazeHeight = TILE_SIZE * gridSize;
-    const mazeOffsetX = (windowWidth - mazeWidth) / 2;
-    const mazeOffsetY = (windowHeight - mazeHeight) / 2 + TOP_UI_HEIGHT / 2;
 
     const time = getTimeForLevel(level);
     setCountdown(time);
     setMaxCountdown(time);
 
     setMaze(newMaze);
-
-    setPlayerPos({
-      x: mazeOffsetX + TILE_SIZE * start.x + (TILE_SIZE - PLAYER_SIZE) / 2,
-      y: mazeOffsetY + TILE_SIZE * start.y + (TILE_SIZE - PLAYER_SIZE) / 2,
-    });
-
-    setTargetPos({
-      x: mazeOffsetX + TILE_SIZE * goal.x + (TILE_SIZE - TARGET_SIZE) / 2,
-      y: mazeOffsetY + TILE_SIZE * goal.y + (TILE_SIZE - TARGET_SIZE) / 2,
-    });
+    setPlayerPos(cellToPos(start, PLAYER_TILES));
+    setTargetPos(cellToPos(goal, TARGET_TILES));
 
     setJoystickDirection({ x: 0, y: 0 });
+    joystickDirectionRef.current = { x: 0, y: 0 };
     setGameOver(false);
     setFlash(false);
   };
@@ -115,18 +137,21 @@ const GameScreen: React.FC = () => {
     initializeGame();
   }, [level]);
 
+  // Collision test in tile units: any of the player's four corners landing on
+  // a wall (or outside the grid) counts as a collision.
   const isCollidingWithWall = React.useCallback(
     (x: number, y: number) => {
+      if (maze.length === 0) return true;
       const corners = [
         { x, y },
-        { x: x + PLAYER_SIZE, y },
-        { x, y: y + PLAYER_SIZE },
-        { x: x + PLAYER_SIZE, y: y + PLAYER_SIZE },
+        { x: x + PLAYER_TILES, y },
+        { x, y: y + PLAYER_TILES },
+        { x: x + PLAYER_TILES, y: y + PLAYER_TILES },
       ];
 
-      for (let corner of corners) {
-        const gridX = Math.floor((corner.x - MAZE_OFFSET_X) / TILE_SIZE);
-        const gridY = Math.floor((corner.y - MAZE_OFFSET_Y) / TILE_SIZE);
+      for (const corner of corners) {
+        const gridX = Math.floor(corner.x);
+        const gridY = Math.floor(corner.y);
 
         if (
           gridY < 0 ||
@@ -141,21 +166,24 @@ const GameScreen: React.FC = () => {
 
       return false;
     },
-    [maze]
+    [maze],
   );
 
   useEffect(() => {
     joystickDirectionRef.current = joystickDirection;
   }, [joystickDirection]);
 
+  // Movement loop. Reads joystick direction from a ref so we don't re-subscribe
+  // every frame. X and Y are resolved independently so the player slides along
+  // walls instead of sticking.
   useEffect(() => {
-    if (maze.length === 0 || showStartScreen || isPaused) return;
+    if (maze.length === 0 || showStartScreen || isPaused || gameOver) return;
 
     const animatePlayer = () => {
       setPlayerPos((prevPos) => {
         const dir = joystickDirectionRef.current;
-        let newX = prevPos.x + dir.x * PLAYER_SPEED;
-        let newY = prevPos.y + dir.y * PLAYER_SPEED;
+        let newX = prevPos.x + dir.x * SPEED_TILES;
+        let newY = prevPos.y + dir.y * SPEED_TILES;
 
         if (isCollidingWithWall(newX, prevPos.y)) newX = prevPos.x;
         if (isCollidingWithWall(prevPos.x, newY)) newY = prevPos.y;
@@ -173,28 +201,29 @@ const GameScreen: React.FC = () => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [maze, showStartScreen, isPaused]);
+  }, [maze, showStartScreen, isPaused, gameOver, isCollidingWithWall]);
 
   const playerPosRef = useRef(playerPos);
   useEffect(() => {
     playerPosRef.current = playerPos;
   }, [playerPos]);
 
+  // Win / next-level detection (tile units).
   useEffect(() => {
     if (gameOver || maze.length === 0 || showStartScreen) return;
 
     const distance = Math.hypot(
-      playerPos.x + PLAYER_SIZE / 2 - (targetPos.x + TARGET_SIZE / 2),
-      playerPos.y + PLAYER_SIZE / 2 - (targetPos.y + TARGET_SIZE / 2)
+      playerPos.x + PLAYER_TILES / 2 - (targetPos.x + TARGET_TILES / 2),
+      playerPos.y + PLAYER_TILES / 2 - (targetPos.y + TARGET_TILES / 2),
     );
 
-    if (distance < PLAYER_SIZE / 2 + TARGET_SIZE / 2) {
+    if (distance < (PLAYER_TILES + TARGET_TILES) / 2) {
       setJoystickDirection({ x: 0, y: 0 });
       Vibration.vibrate(200);
 
       if (level === MAX_LEVEL) {
         setGameOver(true);
-        setShowWinScreen(true); // TUTAJ
+        setShowWinScreen(true);
       } else {
         const nextLevel = level + 1;
         setLevel(nextLevel);
@@ -206,9 +235,9 @@ const GameScreen: React.FC = () => {
     }
   }, [playerPos, targetPos, gameOver, maze, showStartScreen]);
 
+  // Countdown + target relocation.
   useEffect(() => {
     if (isPaused) return;
-
     if (maze.length === 0 || gameOver || showStartScreen) return;
 
     if (countdown === 0) {
@@ -225,15 +254,14 @@ const GameScreen: React.FC = () => {
                 setRelocations(0);
               },
             },
-          ]
+          ],
         );
         return;
       }
 
-      const playerCenter = {
-        x: playerPosRef.current.x + PLAYER_SIZE / 2,
-        y: playerPosRef.current.y + PLAYER_SIZE / 2,
-      };
+      // Move the target to the free cell farthest from the player (tile units).
+      const playerCenterX = playerPosRef.current.x + PLAYER_TILES / 2;
+      const playerCenterY = playerPosRef.current.y + PLAYER_TILES / 2;
 
       let maxDistance = -1;
       let farthestCell = { x: 0, y: 0 };
@@ -241,26 +269,20 @@ const GameScreen: React.FC = () => {
       for (let y = 0; y < maze.length; y++) {
         for (let x = 0; x < maze[y].length; x++) {
           if (maze[y][x] === 0) {
-            const cellX =
-              MAZE_OFFSET_X + TILE_SIZE * x + (TILE_SIZE - TARGET_SIZE) / 2;
-            const cellY =
-              MAZE_OFFSET_Y + TILE_SIZE * y + (TILE_SIZE - TARGET_SIZE) / 2;
-
             const distance = Math.hypot(
-              cellX + TARGET_SIZE / 2 - playerCenter.x,
-              cellY + TARGET_SIZE / 2 - playerCenter.y
+              x + 0.5 - playerCenterX,
+              y + 0.5 - playerCenterY,
             );
-
             if (distance > maxDistance) {
               maxDistance = distance;
-              farthestCell = { x: cellX, y: cellY };
+              farthestCell = { x, y };
             }
           }
         }
       }
 
       Vibration.vibrate([100, 100, 100]);
-      setTargetPos(farthestCell);
+      setTargetPos(cellToPos(farthestCell, TARGET_TILES));
       const time = getTimeForLevel(level);
       setCountdown(time);
       setMaxCountdown(time);
@@ -286,6 +308,13 @@ const GameScreen: React.FC = () => {
   }, [countdown, maze, gameOver, showStartScreen, isPaused]);
 
   if (maze.length === 0) return null;
+
+  // Pixel geometry derived from the responsive tileSize. Player/Target are
+  // positioned relative to the maze container (top-left of the grid = origin).
+  const playerSizePx = PLAYER_TILES * tileSize;
+  const targetSizePx = TARGET_TILES * tileSize;
+  const playerPx = { x: playerPos.x * tileSize, y: playerPos.y * tileSize };
+  const targetPx = { x: targetPos.x * tileSize, y: targetPos.y * tileSize };
 
   return (
     <View
@@ -321,7 +350,6 @@ const GameScreen: React.FC = () => {
         <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill}>
           <View style={styles.startOverlay}>
             <Pressable
-              style={styles.startButton2}
               onPress={() => {
                 setIsPaused((prev) => !prev);
               }}
@@ -330,59 +358,6 @@ const GameScreen: React.FC = () => {
             </Pressable>
           </View>
         </BlurView>
-      )}
-
-      {!showStartScreen && (
-        <>
-          <Pressable
-            style={styles.endButton}
-            onPress={() => {
-              setShowStartScreen(true);
-            }}
-          >
-            <Image
-              source={require("../assets/close.png")}
-              style={{ width: 20, height: 20 }}
-            />
-          </Pressable>
-
-          <Pressable
-            style={styles.pauseButton}
-            onPress={() => {
-              setIsPaused((prev) => !prev);
-            }}
-          >
-            <FontAwesome name={isPaused ? "play" : "pause"} size={24} />
-          </Pressable>
-
-          <View style={styles.countdownContainer}>
-            <View style={styles.countdownTextContainer}>
-              <Text>Cel zmieni się za:</Text>
-              <Text
-                style={[
-                  styles.countdownText,
-                  relocations === 2 && { color: "red" },
-                ]}
-              >
-                {countdown}s / {maxCountdown}s
-              </Text>
-            </View>
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusText}>Poziom: {level}</Text>
-              <View style={styles.heartsContainer}>
-                {[...Array(3)].map((_, index) => (
-                  <FontAwesome
-                    key={index}
-                    name={index < 3 - relocations ? "heart" : "heart-o"}
-                    size={24}
-                    color={index < 3 - relocations ? "black" : ""}
-                    style={{ marginHorizontal: 2 }}
-                  />
-                ))}
-              </View>
-            </View>
-          </View>
-        </>
       )}
 
       {showWinScreen && (
@@ -412,19 +387,83 @@ const GameScreen: React.FC = () => {
         </BlurView>
       )}
 
-      <Maze
-        mazeData={maze}
-        tileSize={TILE_SIZE}
-        color={
-          level === MAX_LEVEL - 1
-            ? "blue"
-            : level === MAX_LEVEL
-            ? "green"
-            : undefined
-        }
-      />
-      <Player position={playerPos} size={PLAYER_SIZE} />
-      <Target position={targetPos} size={TARGET_SIZE} />
+      {/* Centered, responsively-sized maze container. Player and target are its
+          children, so they always share the maze's coordinate space. */}
+      <View
+        style={{
+          position: "absolute",
+          left: mazeLeft,
+          top: mazeTop,
+          width: mazeSize,
+          height: mazeSize,
+        }}
+      >
+        <Maze
+          mazeData={maze}
+          tileSize={tileSize}
+          color={
+            level === MAX_LEVEL - 1
+              ? "blue"
+              : level === MAX_LEVEL
+                ? "green"
+                : undefined
+          }
+        />
+        <Player position={playerPx} size={playerSizePx} />
+        <Target position={targetPx} size={targetSizePx} />
+      </View>
+
+      {!showStartScreen && (
+        <View style={[styles.hud, { top: insets.top + 8 }]}>
+          <Pressable
+            style={styles.hudSideButton}
+            onPress={() => {
+              setShowStartScreen(true);
+            }}
+          >
+            <Image
+              source={require("../assets/close.png")}
+              style={{ width: 20, height: 20 }}
+            />
+          </Pressable>
+
+          <View style={styles.hudCenter}>
+            <Text>Cel zmieni się za:</Text>
+            <Text
+              style={[
+                styles.countdownText,
+                relocations === 2 && { color: "red" },
+              ]}
+            >
+              {countdown}s / {maxCountdown}s
+            </Text>
+            <View style={styles.statusRow}>
+              <Text style={styles.statusText}>Poziom: {level}</Text>
+              <View style={styles.heartsContainer}>
+                {[...Array(3)].map((_, index) => (
+                  <FontAwesome
+                    key={index}
+                    name={index < 3 - relocations ? "heart" : "heart-o"}
+                    size={22}
+                    color={index < 3 - relocations ? "black" : "gray"}
+                    style={{ marginHorizontal: 2 }}
+                  />
+                ))}
+              </View>
+            </View>
+          </View>
+
+          <Pressable
+            style={styles.hudSideButton}
+            onPress={() => {
+              setIsPaused((prev) => !prev);
+            }}
+          >
+            <FontAwesome name={isPaused ? "play" : "pause"} size={24} />
+          </Pressable>
+        </View>
+      )}
+
       <Joystick
         onMove={(direction) => {
           setJoystickDirection(direction);
@@ -435,24 +474,46 @@ const GameScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  statusContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  hud: {
     position: "absolute",
-    top: 55,
-    alignSelf: "center",
+    left: 0,
+    right: 0,
     flexDirection: "row",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 50,
+    paddingHorizontal: 12,
+  },
+  hudSideButton: {
+    width: 50,
+    height: 50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hudCenter: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 6,
   },
   statusText: {
     fontSize: 18,
     fontWeight: "bold",
   },
-  container: {
-    flex: 1,
+  heartsContainer: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    padding: TILE_SIZE,
-    backgroundColor: "white",
+  },
+  countdownText: {
+    fontSize: 24,
+    fontWeight: "bold",
   },
   startOverlay: {
     flex: 1,
@@ -491,40 +552,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 50,
   },
-  endButton: {
-    width: 50,
-    height: 50,
-    alignItems: "center",
-    position: "absolute",
-    top: 84,
-    left: 10,
-  },
-  heartsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  countdownContainer: {
-    position: "absolute",
-    top: 80,
-    alignSelf: "center",
-  },
-  countdownTextContainer: {
-    alignItems: "center",
-  },
-  countdownText: {
-    fontSize: 24,
-    fontWeight: "bold",
-  },
-  pauseButton: {
-    width: 50,
-    height: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "absolute",
-    top: 82,
-    right: 10,
-  },
-  startButton2: {},
   winTitle: {
     fontSize: 36,
     fontWeight: "bold",
